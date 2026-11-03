@@ -1,0 +1,16 @@
+.venv/
+__pycache__/
+*.pyc
+__old/
+__archive/
+input_images/
+output_images/
+bg_images/
+ai_debug_log.txt
+tmp_*/
+settings.json
+
+# UIから自動生成される引き渡しファイル (既定値はapp.py内に定義)
+tag_settings.txt
+ai_prompt.txt
+obj_prompts.txt
