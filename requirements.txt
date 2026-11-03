@@ -1,0 +1,12 @@
+gradio
+opencv-python
+numpy
+ultralytics
+huggingface_hub
+Pillow
+rembg
+realesrgan
+basicsr
+transformers
+torch
+torchvision

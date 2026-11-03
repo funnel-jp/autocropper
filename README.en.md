@@ -1,0 +1,96 @@
+# autocropper — LoRA Dataset Maker
+
+[日本語](README.md) | [English](README.en.md)
+
+A Gradio-based WebUI that automates the whole pipeline from illustration images to a
+Stable Diffusion LoRA training dataset: cropping, auto-tagging, AI-assisted curation,
+tag cleaning, and background composition, provided as a 4-step pipeline.
+
+## Pipeline
+
+| Step | What it does | Script |
+|------|--------------|--------|
+| Step 1 | Crop & auto-tag. Crops character assets from input images into categories (`_illust` / `_full` / `_upper` / `_face` / `_eye` / `_obj`), with rembg background removal, Real-ESRGAN upscaling, per-eye extraction, and WD14 auto-tagging | `auto_cropper.py` → `retagger.py` |
+| Step 2 | Manual curation & AI assist. An Ollama VLM scores each cluster OK/NG; a translation model shows the reasoning in Japanese. Bulk isolate NG images, protect or delete them | `app.py` (`ai_selector.py`) |
+| Step 3 | Tag editing & cleaning. Category-based tag removal driven by `tag_master.json` (separating traits the LoRA should learn), bulk tag editing with undo, Danbooru wiki links | `tag_cleaner.py` |
+| Step 4 | Final build. Samples assets according to ratio/count settings, composites them onto background images (auto-prepared in 3 aspect ratios) with color jitter and blur, and writes the training dataset | `dataset_builder.py` |
+
+## Requirements
+
+- Windows 10/11 (`setup.bat` / `run.bat` are for Windows)
+- Python 3.11 recommended (`setup.py` creates the venv)
+- NVIDIA GPU recommended (VLM scoring needs ~3–8 GB VRAM. Choosing a plamo translation model runs translation on CPU only, using no VRAM)
+- [Ollama](https://ollama.com/download) (required for Step 2 AI scoring/translation)
+- [sd-scripts](https://github.com/kohya-ss/sd-scripts) (required for WD14 auto-tagging; without it, background detection falls back to OpenCV)
+
+## Setup
+
+```
+git clone <this repository>
+cd autocropper
+setup.bat
+```
+
+`setup.py` (interactive) performs the following. Each model is downloaded **only after you
+confirm you agree with its license**:
+
+1. Create the working folders (`input_images` / `output_images` / `bg_images`), create the venv, and install `requirements.txt`
+2. Model selection menu (VLM / translation / WD14 / face detection / Real-ESRGAN / OWLv2 / rembg) — accept defaults, type another model, or skip
+3. Download HuggingFace model files
+4. `ollama pull` for Ollama models (plamo models require an account that has accepted the PLaMo community license on HuggingFace)
+5. Pre-fetch the WD14 tagger model into sd-scripts (when `--sd-scripts <path>` is given)
+
+Common flags: `--yes` (accept defaults) / `--vlm <name>` / `--translate <name>` / `--sd-scripts <path>` / `--skip-hf` / `--skip-ollama`
+
+## Usage
+
+```
+run.bat
+```
+
+Starts the Ollama server automatically, then opens `http://127.0.0.1:7860` in your browser
+(first launch may take ~1 minute to import libraries).
+
+1. Put source images in `input_images/` (bring your own images generated with your own generation models — no samples are included), set the sd-scripts path in **Step 1**, and run — categorized assets and tags are written to `output_images/`
+2. In **Step 2**, load the folder, run AI scoring, then isolate NG images or curate manually
+3. In **Step 3**, configure per-character removal categories, run bulk cleaning, and fine-tune tags by hand if needed
+4. In **Step 4**, set the output folder (your sd-scripts training dir) and generate the dataset — then start LoRA training
+
+## Models used
+
+| Purpose | Default | Notes |
+|---------|---------|-------|
+| VLM scoring | `qwen3.5:9b` | Low-VRAM alternatives such as `gemma3:4b` (selectable in setup) |
+| Translation (reasons) | `gemma3:1b` | Higher quality with `plamo-2-translate` (IQ4_XS/Q4_K_M), which runs on CPU |
+| Tagging | `SmilingWolf/wd-eva02-large-tagger-v3` | via sd-scripts |
+| Face detection | `face_yolov8n.pt` | ultralytics weights |
+| Upscaling | `RealESRGAN_x4plus_anime_6B.pth` | |
+| Object detection | `google/owlv2-base-patch16-ensemble` | for `_obj` cropping |
+| Background removal | `isnet-anime` | `u2net` also available |
+
+Check the license and usage terms of every model on its model page. The setup script only
+asks for your consent; it makes no warranty.
+
+## Configuration files
+
+| File | Purpose |
+|------|---------|
+| `settings.json` | Saves all UI inputs and model choices (machine-specific; git-ignored) |
+| `tag_master.json` | Concept-category dictionary used by Step 3 category removal |
+| `char_tag_rules.json` | Per-character categories to keep out of captions (= learned by the LoRA) |
+| `tag_settings.txt` | Regex-based add/remove/protect rules |
+| `obj_prompts.txt` | Word list for OWLv2 object cropping (one term per line; edited via the "小物プロンプト" field) |
+| `ai_prompt.txt` | Copy of the AI scoring prompt (edited and auto-saved from the UI) |
+
+`tag_settings.txt` / `ai_prompt.txt` / `obj_prompts.txt` are hand-off files auto-generated by the UI and are not tracked in git (defaults are defined in app.py).
+
+## Notes
+
+- Only use images you have the rights/licenses to train on
+- AI scoring is an assist; always make the final call yourself
+- Images isolated into `filtered_by_ai/` can be restored at any time; bulk tag edits are undoable via `.bak`
+
+## License
+
+Source code in this repository is licensed under the [Apache License 2.0](LICENSE).
+The terms of each downloaded model take precedence over this license; verify them yourself.
